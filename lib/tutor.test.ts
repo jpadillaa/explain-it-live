@@ -1222,3 +1222,52 @@ test("Kokoro-FastAPI recibe el texto pronunciable, transmite MP3 y no llama a El
   );
   await assert.rejects(professorSpeech("Hola", undefined, env, async () => new Response("{}", { status: 422 })), /em_alex/);
 });
+
+test("el kit del iframe es JavaScript válido y el documento incrusta solo las librerías que usa", async (t) => {
+  const { artifactKit } = await import("./artifact-kit");
+  assert.doesNotThrow(() => new Function(artifactKit));
+  for (const api of ["reproductor", "pasos", "conectar", "preguntar", "estado", "revision"]) assert.match(artifactKit, new RegExp(api));
+  const { GET } = await import("../app/api/vendor/route");
+  const anime = await GET(new Request("http://localhost/api/vendor?lib=anime"));
+  assert.match(await anime.text(), /anime\.js v3/);
+  assert.equal((await GET(new Request("http://localhost/api/vendor?lib=lodash"))).status, 404);
+  const requested: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    requested.push(String(url));
+    return new Response(`/* ${url} */ var cierre = "</script>";`);
+  });
+  const { frameDocument } = await import("./artifact-frame");
+  const base = { tipo: "html" as const, titulo: "Video", descripcion: "Animación.", guia: [] };
+  const plain = await frameDocument({ ...base, html: "<div id=a></div><script>tutor.reproductor({contenedor:'#a',escenas:[{duracion:1000,dibujar(){}}]})</script>" });
+  assert.deepEqual(requested, []);
+  assert.match(plain, /Content-Security-Policy/);
+  const withD3 = await frameDocument({ ...base, html: "<svg id=g></svg><script>d3.select('#g')</script>" });
+  assert.deepEqual(requested, ["/api/vendor?lib=d3"]);
+  assert.ok(withD3.includes('"<\\/script>"'), "un </script> dentro de una librería no debe cerrar la etiqueta");
+});
+
+test("la corrección de maquetación envía al diseñador los problemas medidos y devuelve un artefacto validado", async (t) => {
+  const { POST } = await import("../app/api/artifact/route");
+  setTestEnv(t, {
+    AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com/",
+    AZURE_OPENAI_API_KEY: "test-key",
+    AZURE_OPENAI_DEPLOYMENT_1: "docente",
+    AZURE_OPENAI_DEPLOYMENT_ARTIFACTS: "disenador",
+  });
+  const artifact = { tipo: "html", titulo: "Placa", descripcion: "Partes de la placa.", guia: [], html: '<div style="width:1400px">Pines</div>' };
+  const fixed = { ...artifact, html: '<div class="fila"><div class="tarjeta">Pines</div></div>' };
+  const bodies: { model: string; messages: { content: string }[] }[] = [];
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)));
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(fixed) } }] }), { headers: { "Content-Type": "application/json" } });
+  });
+  const request = (body: unknown) => new Request("http://localhost/api/artifact", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const problem = "El contenido mide 1400 px de ancho y el marco 860 px";
+  const response = await POST(request({ artefacto: artifact, problemas: [problem] }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).artefacto.html, fixed.html);
+  assert.equal(bodies[0].model, "disenador");
+  assert.ok(bodies[0].messages.at(-1)!.content.includes(problem));
+  assert.equal((await POST(request({ artefacto: artifact, problemas: [] }))).status, 400);
+  assert.equal((await POST(request({ artefacto: { ...artifact, tipo: "mermaid", codigo: "flowchart LR\n A-->B" }, problemas: [problem] }))).status, 400);
+});

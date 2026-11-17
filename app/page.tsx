@@ -25,6 +25,8 @@ import {
 } from "@/lib/tutor";
 import { TutorAvatar } from "./components/TutorAvatar";
 import { LessonWorkspace } from "./components/LessonWorkspace";
+import { ArtifactReviewer } from "./components/RichArtifactView";
+import type { FramedArtifact } from "@/lib/artifact-frame";
 import { simulationDefaults } from "@/lib/artifacts";
 import {
   readTutorResponse,
@@ -58,8 +60,16 @@ export default function Home() {
   const [artifactUpdate, setArtifactUpdate] = useState(0);
   const requestAbort = useRef<AbortController | null>(null);
   const [pendingArtifact, setPendingArtifact] = useState<
-    NonNullable<TutorResult["artefactoPendiente"]> | null
+    (NonNullable<TutorResult["artefactoPendiente"]> & { etapa?: "revision" | "correccion" }) | null
   >(null);
+  // Revisión visual de artefactos HTML/SVG antes de mostrarlos (hasta 2 correcciones).
+  const [review, setReview] = useState<{
+    artifact: FramedArtifact;
+    attempt: number;
+    width: number;
+    best: { artifact: FramedArtifact; problems: number } | null;
+  } | null>(null);
+  const reviewAbort = useRef<AbortController | null>(null);
   const [artifactError, setArtifactError] = useState("");
   const currentArtifact = useRef(initialContext.artefacto);
   const [error, setError] = useState("");
@@ -119,6 +129,7 @@ export default function Home() {
       .catch(() => setMode("unknown"));
     return () => {
       requestAbort.current?.abort();
+      reviewAbort.current?.abort();
       voiceAbort.current?.abort();
       capture.current?.cancel();
     };
@@ -151,6 +162,8 @@ export default function Home() {
     lock.current = true;
     // Una nueva participación cancela el diseño de un artefacto que aún no llegó.
     requestAbort.current?.abort();
+    reviewAbort.current?.abort();
+    setReview(null);
     setPendingArtifact(null);
     setArtifactError("");
     stopSpeech();
@@ -204,6 +217,11 @@ export default function Home() {
           },
           onArtifact: (artifact) => {
             if (!current()) return;
+            if (artifact.tipo === "html" || artifact.tipo === "svg") {
+              setPendingArtifact((p) => p && { ...p, etapa: "revision" });
+              setReview({ artifact, attempt: 0, width: stageWidth(), best: null });
+              return;
+            }
             applyArtifact(artifact);
             setPendingArtifact(null);
           },
@@ -230,6 +248,46 @@ export default function Home() {
         setBusy(false);
       }
       if (current()) requestAbort.current = null;
+    }
+  }
+  /** Ancho útil del marco del artefacto, para dibujar la revisión en las mismas condiciones. */
+  function stageWidth() {
+    const area = document.querySelector(".artifact-area")?.clientWidth ?? 1000;
+    return Math.max(320, Math.min(1000, area - 64) - 72 - 34);
+  }
+  async function finishReview(problems: string[]) {
+    const current = review;
+    if (!current) return;
+    const best =
+      !current.best || problems.length < current.best.problems
+        ? { artifact: current.artifact, problems: problems.length }
+        : current.best;
+    if (!problems.length || current.attempt >= 2) {
+      setReview(null);
+      setPendingArtifact(null);
+      applyArtifact(best.artifact);
+      return;
+    }
+    setPendingArtifact((p) => p && { ...p, etapa: "correccion" });
+    const abort = new AbortController();
+    reviewAbort.current = abort;
+    try {
+      const response = await fetch("/api/artifact", {
+        method: "POST",
+        signal: abort.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artefacto: current.artifact, problemas: problems }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.artefacto) throw new Error(data.error || "sin corrección");
+      if (reviewAbort.current !== abort) return;
+      setReview({ ...current, artifact: data.artefacto, attempt: current.attempt + 1, best });
+    } catch {
+      if (abort.signal.aborted || reviewAbort.current !== abort) return;
+      // Sin corrección disponible se muestra la mejor versión obtenida.
+      setReview(null);
+      setPendingArtifact(null);
+      applyArtifact(best.artifact);
     }
   }
   function applyArtifact(artifact: Context["artefacto"]) {
@@ -576,6 +634,14 @@ export default function Home() {
         patch={patch} onAsk={askFromWorkspace}
         pending={pendingArtifact} artifactError={artifactError}
         onDismissError={dismissArtifactError} />
+      {review && (
+        <ArtifactReviewer
+          key={`revision-${review.attempt}`}
+          artifact={review.artifact}
+          width={review.width}
+          onResult={finishReview}
+        />
+      )}
       <aside className="rail">
         <button
           title="Progreso"

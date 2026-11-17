@@ -15,7 +15,8 @@ Es una demostración local: no incluye autenticación, base de datos ni sesiones
 
 - **Clase guiada:** una sola intervención visible y un estado compacto (eje, conceptos explicados y resumen). «Continuar clase» recorre los conceptos de cada eje; el progreso se completa con preguntas de comprobación.
 - **Lecciones en Markdown:** front matter YAML para la interfaz (curso, profesor, objetivos, pronunciación, alcance) y Markdown para el contenido. Formato en [lessons/README.md](lessons/README.md).
-- **Artefactos ricos:** el profesor encarga visualizaciones y un diseñador dedicado genera laboratorios HTML/CSS/JS interactivos, esquemas SVG, diagramas Mermaid y gráficos Vega-Lite. Además hay diapositivas, tablas y diagramas/simulaciones declarativos simples.
+- **Artefactos ricos:** el profesor encarga visualizaciones y un diseñador dedicado genera laboratorios HTML/CSS/JS interactivos, animaciones tipo video, esquemas, diagramas Mermaid y gráficos Vega-Lite. Además hay diapositivas, tablas y diagramas/simulaciones declarativos simples.
+- **Revisión visual automática:** antes de mostrar un artefacto HTML/SVG se dibuja oculto y se miden textos superpuestos, tapados, recortados o demasiado pequeños, desbordes y errores. El diseñador lo corrige hasta dos veces.
 - **Voz:** el profesor empieza silenciado; al activar el altavoz narra con ElevenLabs, con Kokoro-FastAPI (Docker) o con Kokoro local.
 - **Participación oral:** grabación en el navegador y transcripción local con Whisper.
 - **Avatar 2D** animado solo mientras suena la voz, y revelado de 1,25 s cuando cambia el material.
@@ -108,7 +109,8 @@ ElevenLabs y Kokoro-FastAPI transmiten MP3 que empieza a sonar con los primeros 
 1. El estudiante escribe, habla o pulsa una acción; se detiene la narración en curso.
 2. `/api/tutor` clasifica el alcance y genera la intervención validada con Zod (con un intento de corrección).
 3. La narración llega primero. Si el profesor encargó un artefacto rico, la clase sigue mientras el diseñador lo genera, se valida y llega por el mismo stream NDJSON.
-4. HTML y SVG se muestran en un iframe aislado (`sandbox="allow-scripts"`, CSP sin red). Desde ahí, `tutor.preguntar()` y `tutor.estado()` envían preguntas y estado al profesor. Mermaid se dibuja en modo `strict` y Vega sin acceso a la red.
+4. Los artefactos HTML y SVG pasan por la revisión visual y, si hace falta, por `/api/artifact` para corregir la maquetación.
+5. HTML y SVG se muestran en un iframe aislado (`sandbox="allow-scripts"`, CSP sin red). Desde ahí, `tutor.preguntar()` y `tutor.estado()` envían preguntas y estado al profesor. El kit ofrece `tutor.reproductor` (video con escenas), `tutor.pasos` y `tutor.conectar` (flechas automáticas), y anime.js y d3 sin red. Mermaid se dibuja en modo `strict` y Vega sin acceso a la red.
 
 La validación garantiza estructura y aislamiento, no la corrección conceptual de lo generado.
 
@@ -147,6 +149,8 @@ Con el servidor en marcha, `GET /api/tutor` y `GET /api/speech` muestran el modo
 | `lib/lesson.ts`, `lib/lesson-file.ts`, `lib/course.ts` | Esquema, lectura e inyección de la lección. |
 | `lib/tutor.ts`, `lib/tutor-stream.ts` | Contratos de petición, respuesta, estado y stream. |
 | `lib/artifacts.ts`, `lib/artifact-check.ts`, `lib/artifact-prompt.ts` | Esquemas, validación y prompt del diseñador. |
+| `lib/artifact-designer.ts`, `lib/model-client.ts`, `app/api/artifact` | Diseño, corrección de maquetación y cliente del modelo. |
+| `lib/artifact-kit.ts`, `lib/artifact-frame.ts`, `app/api/vendor` | Kit y revisión visual del iframe, y librerías locales. |
 | `lib/provider.ts`, `lib/speech-provider.ts` | Proveedores de modelo y voz. |
 | `lib/voice.ts`, `lib/audio.ts`, `lib/transcription.ts` | Captura y transcripción de audio. |
 | `lib/narration-player.ts`, `lib/professor-voice.ts`, `lib/professor-text.ts` | Reproducción, voz local y pronunciación. |

@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { MessageCircleQuestion, RotateCcw, TriangleAlert } from "lucide-react";
 import type { RichArtifact } from "@/lib/artifacts";
 import { artifactTheme } from "@/lib/artifact-prompt";
+import { frameDocument, frameMessage, type FramedArtifact } from "@/lib/artifact-frame";
 import type { Context } from "@/lib/tutor";
 
 type Props = {
@@ -82,56 +83,71 @@ export function RichArtifactView({ artifact, disabled, onAsk, onState }: Props) 
 // HTML y SVG: iframe con sandbox="allow-scripts" (origen opaco: sin acceso a la
 // app, cookies ni almacenamiento) y una CSP que bloquea toda la red.
 // ---------------------------------------------------------------------------
-const csp =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'";
-
-const frameStyles = `:root{${Object.entries(artifactTheme)
-  .map(([key, value]) => `${key}:${value}`)
-  .join(";")}}
-*{box-sizing:border-box}
-html,body{margin:0;background:#fff;color:var(--tutor-ink);font-family:var(--tutor-font);font-size:15px;line-height:1.5}
-body{padding:4px 2px 12px}
-svg{max-width:100%}
-button{font:inherit;cursor:pointer;border:1px solid var(--tutor-line);background:#fff;color:var(--tutor-ink);border-radius:8px;padding:8px 14px;transition:background .15s,border-color .15s}
-button:hover{background:var(--tutor-purple-soft);border-color:var(--tutor-purple)}
-button:disabled{opacity:.5;cursor:default}
-button.primario{background:var(--tutor-purple);border-color:var(--tutor-purple);color:#fff}
-button.primario:hover{filter:brightness(1.08)}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--tutor-purple);outline-offset:2px}
-input[type=range]{accent-color:var(--tutor-purple);width:100%}
-select{font:inherit;border:1px solid var(--tutor-line);border-radius:8px;padding:6px 10px;background:#fff}
-.tarjeta{border:1px solid var(--tutor-line);border-radius:12px;padding:14px 16px;background:var(--tutor-surface)}
-.fila{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.etiqueta{font-size:12px;color:var(--tutor-muted)}
-@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}`;
-
-const bridge = `(function(){
-var send=function(m){m.canal="tutor-artefacto";parent.postMessage(m,"*")};
-window.tutor={
-preguntar:function(t){send({tipo:"preguntar",texto:String(t||"").slice(0,500)})},
-estado:function(o){try{send({tipo:"estado",estado:JSON.parse(JSON.stringify(o||{}))})}catch(e){}}
-};
-window.addEventListener("error",function(e){send({tipo:"error",mensaje:String(e.message||"error").slice(0,300)})});
-var measure=function(){send({tipo:"altura",altura:Math.ceil(document.documentElement.scrollHeight)})};
-window.addEventListener("load",measure);
-new ResizeObserver(measure).observe(document.documentElement);
-})();`;
-
-/** Si el modelo devuelve un documento completo, conserva estilos de <head> y el cuerpo. */
-function bodyFragment(html: string) {
-  if (!/<(?:html|head|body)\b/i.test(html)) return html;
-  const styles = html.match(/<style[\s\S]*?<\/style>/gi)?.join("\n") ?? "";
-  const body = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1];
-  const rest = body ?? html.replace(/<!doctype[^>]*>|<\/?html[^>]*>|<head[\s\S]*?<\/head>|<\/?body[^>]*>/gi, "");
-  return body ? `${styles}\n${rest}` : rest;
+/** Documento del iframe (incrusta el kit y las librerías que use el artefacto). */
+function useFrameDocument(artifact: FramedArtifact, onProblem?: (p: string) => void, revision = false) {
+  const [doc, setDoc] = useState<{ for: FramedArtifact; html: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    frameDocument(artifact, { revision })
+      .then((html) => !cancelled && setDoc({ for: artifact, html }))
+      .catch((error) => !cancelled && onProblem?.(error instanceof Error ? error.message : "no se pudo preparar"));
+    return () => {
+      cancelled = true;
+    };
+  }, [artifact, onProblem, revision]);
+  return doc?.for === artifact ? doc.html : null;
 }
 
-function documentFor(artifact: Extract<RichArtifact, { tipo: "html" | "svg" }>) {
-  const content =
-    artifact.tipo === "svg"
-      ? `<div style="display:flex;justify-content:center">${artifact.svg}</div>`
-      : bodyFragment(artifact.html);
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${frameStyles}</style><script>${bridge}</script></head><body>${content}</body></html>`;
+/**
+ * Dibuja el artefacto fuera de pantalla, con el ancho del panel y altura amplia,
+ * y devuelve los problemas visuales que detecta el kit (o [] si no responde a tiempo).
+ */
+export function ArtifactReviewer({
+  artifact,
+  width,
+  onResult,
+}: {
+  artifact: FramedArtifact;
+  width: number;
+  onResult: (problemas: string[]) => void;
+}) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const done = useRef(false);
+  const report = useRef(onResult);
+  report.current = onResult;
+  const [reportProblem] = useState(() => (problem: string) => finish([`No se pudo preparar: ${problem}`]));
+  const srcDoc = useFrameDocument(artifact, reportProblem, true);
+  function finish(problemas: string[]) {
+    if (done.current) return;
+    done.current = true;
+    report.current(problemas);
+  }
+  useEffect(() => {
+    function receive(event: MessageEvent) {
+      const data = frameMessage(event, frame.current);
+      if (data?.tipo === "revision") finish(data.problemas);
+    }
+    window.addEventListener("message", receive);
+    // Si el artefacto no termina de cargar, se muestra igualmente.
+    const timer = setTimeout(() => finish([]), 6000);
+    return () => {
+      window.removeEventListener("message", receive);
+      clearTimeout(timer);
+    };
+  }, []);
+  if (srcDoc === null) return null;
+  return (
+    <iframe
+      ref={frame}
+      aria-hidden="true"
+      tabIndex={-1}
+      title="Revisión de la visualización"
+      sandbox="allow-scripts"
+      referrerPolicy="no-referrer"
+      srcDoc={srcDoc}
+      style={{ position: "fixed", left: -10000, top: 0, width, height: 1400, border: 0, opacity: 0, pointerEvents: "none" }}
+    />
+  );
 }
 
 function cleanState(value: unknown): Context["estado"] {
@@ -150,18 +166,17 @@ function SandboxFrame({
   onAsk,
   onState,
   onProblem,
-}: Props & { artifact: Extract<RichArtifact, { tipo: "html" | "svg" }>; onProblem: (p: string) => void }) {
+}: Props & { artifact: FramedArtifact; onProblem: (p: string) => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(420);
   const lastAsk = useRef(0);
-  const srcDoc = useMemo(() => documentFor(artifact), [artifact]);
+  const srcDoc = useFrameDocument(artifact, onProblem);
   const latest = useRef({ disabled, onAsk, onState, onProblem });
   latest.current = { disabled, onAsk, onState, onProblem };
   useEffect(() => {
     function receive(event: MessageEvent) {
-      if (event.source !== frame.current?.contentWindow) return;
-      const data = event.data;
-      if (!data || data.canal !== "tutor-artefacto") return;
+      const data = frameMessage(event, frame.current);
+      if (!data) return;
       const { disabled, onAsk, onState, onProblem } = latest.current;
       if (data.tipo === "altura" && Number.isFinite(data.altura))
         setHeight(Math.min(1400, Math.max(240, data.altura)));
@@ -177,6 +192,7 @@ function SandboxFrame({
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
   }, []);
+  if (srcDoc === null) return <div className="rich-loading">Preparando la visualización…</div>;
   return (
     <iframe
       ref={frame}

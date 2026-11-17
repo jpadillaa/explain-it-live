@@ -1,6 +1,6 @@
 type Environment = Record<string, string | undefined>;
 
-type Provider = { url: string; model: string; headers: Record<string, string> };
+export type Provider = { url: string; model: string; headers: Record<string, string> };
 export function getProvider(env: Environment = process.env): Provider | { error: string } | null {
   const endpoint = env.AZURE_OPENAI_ENDPOINT?.trim();
   const azureKey = env.AZURE_OPENAI_API_KEY?.trim();

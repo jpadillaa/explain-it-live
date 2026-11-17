@@ -36,7 +36,7 @@ type WorkspaceProps = {
   patch: (values: Partial<Context>) => void;
   onAsk: (text: string) => void;
   /** Artefacto que el diseñador está construyendo; la vista actual se mantiene mientras tanto. */
-  pending: { formato: keyof typeof formatNames; titulo: string } | null;
+  pending: { formato: keyof typeof formatNames; titulo: string; etapa?: "revision" | "correccion" } | null;
   artifactError: string;
   onDismissError: () => void;
 };
@@ -124,7 +124,12 @@ export const LessonWorkspace = memo(function LessonWorkspace({
           <div className="artifact-banner designing" role="status">
             <LoaderCircle size={16} className="activity-spinner" />
             <span>
-              Diseñando {formatNames[pending.formato]}: <b>{pending.titulo}</b>
+              {pending.etapa === "revision"
+                ? "Revisando cómo se ve"
+                : pending.etapa === "correccion"
+                  ? "Corrigiendo la maquetación de"
+                  : `Diseñando ${formatNames[pending.formato]}:`}{" "}
+              <b>{pending.titulo}</b>
             </span>
           </div>
         )}
