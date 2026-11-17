@@ -1,0 +1,43 @@
+# Dependencias
+node_modules/
+
+# Compilados y cachés de Next.js / TypeScript
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# Modelos locales descargados (npm run voice:prepare / professor:prepare)
+.cache/
+
+# Variables de entorno y credenciales (solo se versiona la plantilla)
+.env*
+!.env.example
+
+# Registros y depuración
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Pruebas y cobertura
+coverage/
+
+# Audio y capturas generados durante pruebas manuales
+/*.png
+/*.jpg
+/*.jpeg
+/*.wav
+/*.mp3
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Claude Code: configuración local por usuario
+.claude/settings.local.json
