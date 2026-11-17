@@ -5,31 +5,31 @@ export type ModelStage = "alcance" | "generacion" | "validacion" | "diseno";
 
 /** Llamadas JSON al proveedor; el diseño puede usar un despliegue más capaz. */
 export function modelClient(provider: Provider, signal: AbortSignal) {
-  const artifactModel =
-    process.env.AZURE_OPENAI_DEPLOYMENT_ARTIFACTS?.trim() ||
-    process.env.TUTOR_ARTIFACT_MODEL?.trim() ||
-    provider.model;
+  const label = { azure: "Azure", openai: "El proveedor", gemini: "Gemini" }[provider.name];
   async function complete(messages: Message[], stage: ModelStage) {
+    const reasoning = stage === "diseno" ? provider.reasoning?.artifact : provider.reasoning?.teacher;
     const response = await fetch(provider.url, {
       method: "POST",
       signal: AbortSignal.any([
         signal,
-        AbortSignal.timeout(stage === "diseno" ? 180000 : stage === "generacion" ? 60000 : 30000),
+        AbortSignal.timeout(stage === "diseno" ? 240000 : stage === "generacion" ? 120000 : 60000),
       ]),
       headers: provider.headers,
       body: JSON.stringify({
-        model: stage === "diseno" ? artifactModel : provider.model,
+        model: stage === "diseno" ? provider.artifactModel : provider.model,
+        ...(reasoning && { reasoning_effort: reasoning }),
         response_format: { type: "json_object" },
         messages,
       }),
     });
     if (!response.ok) {
       const messages: Record<ModelStage, string> = {
-        alcance: `Azure respondió ${response.status} al comprobar el tema. Puedes reintentar.`,
-        diseno: `El proveedor respondió ${response.status} al diseñar la visualización. Puedes pedirla de nuevo.`,
-        validacion: `El proveedor respondió ${response.status} al verificar la narración. Puedes reintentar.`,
-        generacion: `El proveedor respondió ${response.status}. Revisa la clave, el despliegue y el endpoint en .env.`,
+        alcance: `${label} respondió ${response.status} al comprobar el tema. Puedes reintentar.`,
+        diseno: `${label} respondió ${response.status} al diseñar la visualización. Puedes pedirla de nuevo.`,
+        validacion: `${label} respondió ${response.status} al verificar la narración. Puedes reintentar.`,
+        generacion: `${label} respondió ${response.status}. Revisa la clave, el modelo y el endpoint en .env.`,
       };
+      console.error(`[modelo] ${provider.name} ${stage}: HTTP ${response.status}`, (await response.text()).slice(0, 500));
       throw new Error(messages[stage]);
     }
     const data = await response.json();
@@ -39,8 +39,10 @@ export function modelClient(provider: Provider, signal: AbortSignal) {
 }
 
 export function parseModelJson(content: string): unknown {
+  // Algunos modelos (p. ej. Gemini) envuelven el JSON en un bloque ```json.
+  const text = content.trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, "$1");
   try {
-    return JSON.parse(content);
+    return JSON.parse(text);
   } catch {
     return null;
   }

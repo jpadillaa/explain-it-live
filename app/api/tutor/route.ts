@@ -108,6 +108,7 @@ export async function GET() {
   const provider = getProvider();
   return NextResponse.json({
     mode: provider && !("error" in provider) ? "connected" : "local",
+    ...(provider && !("error" in provider) && { proveedor: provider.name, modelo: provider.model }),
   });
 }
 
@@ -428,11 +429,12 @@ export async function POST(request: Request) {
     // Registro local para diagnosticar salidas del modelo; no incluye credenciales.
     if (error instanceof z.ZodError)
       console.error("[tutor] salida inválida:", JSON.stringify(error.issues).slice(0, 2000));
+    else console.error("[tutor] error:", error instanceof Error ? `${error.name}: ${error.message}` : error);
     return error instanceof z.ZodError
       ? "El contenido generado no es válido. Puedes reintentar conservando la vista actual."
       : error instanceof Error && error.name !== "TimeoutError"
         ? error.message
-        : "Azure tardó demasiado en responder. Puedes reintentar.";
+        : "El modelo tardó demasiado en responder. Puedes reintentar.";
   }
   // Existing JSON callers receive the same final response. The UI requests progress events.
   if (!request.headers.get("Accept")?.includes("application/x-ndjson")) {

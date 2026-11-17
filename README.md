@@ -25,7 +25,7 @@ Es una demostración local: no incluye autenticación, base de datos ni sesiones
 ## Requisitos
 
 - Node.js 20.9 o posterior y npm (verificado en macOS con Node.js 26.4.0 y npm 11.17.0).
-- Un despliegue de Azure OpenAI (u otro proveedor compatible con Chat Completions) para la experiencia generativa. Sin proveedor se activa una demo guiada limitada.
+- Un modelo para la experiencia generativa: Azure OpenAI, OpenAI (u otro compatible con Chat Completions) o Google Gemini. Sin proveedor se activa una demo guiada limitada.
 - Para la voz, una de estas opciones: clave de ElevenLabs, Docker para Kokoro-FastAPI, o `espeak-ng` para Kokoro local.
 - Navegador con micrófono, MediaRecorder y Web Audio, en `localhost`/`127.0.0.1` o HTTPS.
 
@@ -70,7 +70,19 @@ LESSON_FILE=lessons/nube-nist.md
 # LESSON_FILE=lessons/arduino-electronica.md
 ```
 
-### Profesor (Azure OpenAI)
+### Profesor (modelo de lenguaje)
+
+`MODEL_PROVIDER` elige el proveedor (`azure`, `openai` o `gemini`) sin borrar las credenciales de los demás. Sin valor se usa Azure si está configurado, luego Gemini y luego OpenAI/compatible; sin ninguno, la demo local. Cada proveedor admite un modelo aparte para diseñar artefactos.
+
+```dotenv
+MODEL_PROVIDER=gemini
+GEMINI_API_KEY=            # clave de Google AI Studio
+GEMINI_MODEL=gemini-4-hydrogen
+GEMINI_ARTIFACT_MODEL=     # opcional; por defecto GEMINI_MODEL
+```
+
+Gemini se usa a través de su endpoint compatible con OpenAI (`https://generativelanguage.googleapis.com/v1beta/openai/`).
+
 
 ```dotenv
 AZURE_OPENAI_ENDPOINT=https://TU-RECURSO.openai.azure.com/
@@ -80,7 +92,7 @@ AZURE_OPENAI_DEPLOYMENT_1=gpt-5.4-mini
 AZURE_OPENAI_DEPLOYMENT_ARTIFACTS=
 ```
 
-El endpoint es la URL base HTTPS del recurso (o su base `/openai/v1/`). La alternativa `TUTOR_API_KEY`, `TUTOR_MODEL`, `TUTOR_BASE_URL` (y `TUTOR_ARTIFACT_MODEL`) sirve para otros proveedores compatibles; Azure tiene prioridad.
+El endpoint es la URL base HTTPS del recurso (o su base `/openai/v1/`). `MODEL_PROVIDER=openai` usa `TUTOR_API_KEY`, `TUTOR_MODEL`, `TUTOR_BASE_URL` y `TUTOR_ARTIFACT_MODEL`, válidos para OpenAI u otros proveedores compatibles.
 
 ### Voz del profesor
 
@@ -133,7 +145,7 @@ Con el servidor en marcha, `GET /api/tutor` y `GET /api/speech` muestran el modo
 | No se escucha al profesor | Actívalo con el altavoz; empieza silenciado. Revisa el volumen. |
 | «No se pudo conectar con Kokoro» | Que el contenedor esté en marcha y `KOKORO_API_URL` sea correcta. |
 | Error de ElevenLabs | Clave, permisos de texto a voz, Voice ID, modelo y créditos. |
-| Azure no responde | URL base, clave y nombre exacto del despliegue. Los errores de validación se registran en la terminal. |
+| El modelo no responde | `MODEL_PROVIDER`, clave y nombre exacto del modelo o despliegue; con Azure, la URL base. `GET /api/tutor` muestra proveedor y modelo elegidos. Los errores de validación se registran en la terminal. |
 | La lección no carga | El arranque muestra el campo del Markdown a corregir. |
 | Micrófono o Whisper no disponibles | Permisos del navegador y `npm run voice:prepare`. |
 | Una visualización falla | Usa «Pedir corrección» o «Reintentar». |

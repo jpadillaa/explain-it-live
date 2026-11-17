@@ -108,6 +108,30 @@ test("Azure usa API v1 y el despliegue configurado", async () => {
   );
 });
 
+test("MODEL_PROVIDER elige Gemini sin borrar otras credenciales y usa su endpoint compatible", async () => {
+  const { getProvider } = await import("./provider");
+  const { parseModelJson } = await import("./model-client");
+  const env = {
+    AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com/",
+    AZURE_OPENAI_API_KEY: "azure-key",
+    AZURE_OPENAI_DEPLOYMENT_1: "gpt-5.4-mini",
+    TUTOR_API_KEY: "openai-key",
+    GEMINI_API_KEY: "gemini-key",
+  };
+  assert.equal((getProvider(env) as { name: string }).name, "azure");
+  const config = getProvider({ ...env, MODEL_PROVIDER: "gemini", GEMINI_ARTIFACT_MODEL: "gemini-disenador" });
+  assert.ok(config && !("error" in config));
+  assert.equal(config.url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+  assert.equal(config.model, "gemini-4-hydrogen");
+  assert.equal(config.artifactModel, "gemini-disenador");
+  assert.equal(config.headers.Authorization, "Bearer gemini-key");
+  assert.equal((getProvider({ ...env, MODEL_PROVIDER: "openai" }) as { name: string }).name, "openai");
+  assert.equal((getProvider({ GEMINI_API_KEY: "k", GEMINI_MODEL: "otro" }) as { model: string }).model, "otro");
+  assert.ok("error" in getProvider({ MODEL_PROVIDER: "gemini" })!);
+  assert.ok("error" in getProvider({ MODEL_PROVIDER: "claude" })!);
+  assert.deepEqual(parseModelJson('```json\n{"permitido": true}\n```'), { permitido: true });
+});
+
 test("los diagramas validan ids únicos y conexiones existentes", () => {
   const a = {
     tipo: "diagrama",
