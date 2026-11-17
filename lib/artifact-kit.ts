@@ -23,8 +23,9 @@ var tutor={
   estado:function(o){try{send({tipo:"estado",estado:JSON.parse(JSON.stringify(o||{}))})}catch(e){}},
 
   // Animación tipo video: escenas deterministas en función del progreso p (0..1).
-  // Al dibujar el instante t se llama a cada escena con 1 (pasada), p (actual) o 0 (futura),
-  // así la barra de progreso puede saltar a cualquier punto.
+  // Al dibujar el instante t se llama a las escenas pasadas con 1 y a la actual con p,
+  // en orden; las futuras no se llaman. Sirve tanto si cada escena dibuja el estado
+  // completo como si acumula cambios, y la barra puede saltar a cualquier punto.
   reproductor:function(o){
     var cont=$(o.contenedor)||document.body;
     var escenas=(o.escenas||[]).filter(function(s){return s&&s.duracion>0});
@@ -40,7 +41,7 @@ var tutor={
     var t=0,jugando=false,ultimo=0,actual=-1,raf=0;
     function pintar(){
       var i=0;while(i<escenas.length-1&&t>=inicios[i+1])i++;
-      escenas.forEach(function(s,k){var p=k<i?1:k>i?0:clamp((t-inicios[k])/s.duracion,0,1);try{s.dibujar&&s.dibujar(p,k)}catch(e){errores.push(String(e.message));throw e}});
+      for(var k=0;k<=i;k++){var s=escenas[k],p=k<i?1:clamp((t-inicios[k])/s.duracion,0,1);try{s.dibujar&&s.dibujar(p,k)}catch(e){errores.push(String(e.message));throw e}}
       rango.value=String(Math.round(t));tiempo.textContent=fmt(t)+" / "+fmt(total);
       if(i!==actual){actual=i;sub.innerHTML="";sub.append(el("b",{},"Escena "+(i+1)+" de "+escenas.length+". "),document.createTextNode(escenas[i].subtitulo||""));tutor.estado({escena:i+1,escenas:escenas.length,reproduciendo:jugando,segundo:Math.round(t/1000)})}
     }
@@ -140,9 +141,13 @@ function chequear(prefijo){
       if(ancho>2&&alto>2)p("La etiqueta de flecha «"+etiqueta.slice(0,40)+"» se superpone con el texto "+nombre(n)+": aumenta la separación (gap ≥ 140 px) entre las cajas que une o acorta la etiqueta a 1-2 palabras.")})});
   if(pequenos.length){var e=escala();p(pequenos.length+" textos se ven demasiado pequeños (mínimo 12 px en pantalla), p. ej. "+pequenos.slice(0,3).join(", ")+". El marco mide "+W+" px"+(e?"; "+e:"")+". Haz que el dibujo ocupe todo el ancho del marco (no en una columna estrecha) y elige viewBox y font-size para que font-size × escala ≥ 13 px.")}
   return problemas}
+// Huella del contenido visible (sin los controles del kit) para saber si algo cambia.
+function huella(){var c=document.body.cloneNode(true);c.querySelectorAll(".tk-reproductor,.tk-subtitulo,.tk-pasos,.tk-paso-texto,script").forEach(function(n){n.remove()});return c.innerHTML}
 function revisar(){
   var problemas=chequear("");
-  vistas.forEach(function(v){for(var k=0;k<v.total;k++){try{v.ir(k);problemas=problemas.concat(chequear("En "+v.nombre+" "+(k+1)+": "))}catch(e){problemas.push("Error de JavaScript en "+v.nombre+" "+(k+1)+": "+e.message)}}try{v.volver()}catch(e){}});
+  vistas.forEach(function(v){var huellas=[];for(var k=0;k<v.total;k++){try{v.ir(k);huellas.push(huella());problemas=problemas.concat(chequear("En "+v.nombre+" "+(k+1)+": "))}catch(e){problemas.push("Error de JavaScript en "+v.nombre+" "+(k+1)+": "+e.message)}}try{v.volver()}catch(e){}
+    if(huellas.length>1&&huellas.every(function(h){return h===huellas[0]}))problemas.unshift("La animación no cambia: el dibujo es idéntico en todas las escenas ("+v.total+"). Cada dibujar(p) debe modificar de verdad el SVG o el HTML visible (atributos, estilos, textos o posiciones).")
+    else if(huellas.length>2&&huellas.slice(1).every(function(h){return h===huellas[1]}))problemas.unshift("Solo la primera escena se ve distinta; de la "+2+" en adelante el dibujo no cambia. Revisa que cada dibujar(p) actualice lo que muestra su escena.")});
   errores.slice(0,3).forEach(function(m){problemas.push("Error de JavaScript: "+m)});
   if(!document.body.innerText.trim()&&!document.querySelector("svg,canvas"))problemas.push("El artefacto no muestra contenido.");
   // Quita repeticiones: un mismo problema en varias escenas se informa una vez.
