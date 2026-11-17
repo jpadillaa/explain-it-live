@@ -1,5 +1,7 @@
 # Tutor de clase adaptativa
 
+Repositorio: [github.com/jpadillaa/explain-it-live](https://github.com/jpadillaa/explain-it-live)
+
 POC de una clase guiada y adaptativa construida con Next.js, React y TypeScript. Un profesor explica en español por texto y voz; el estudiante participa escribiendo, hablando o con acciones sugeridas. Cada intervención reemplaza la anterior (no es un chat con historial) y el panel central muestra material interactivo generado para lo que se está explicando.
 
 El contenido de la clase vive en un archivo Markdown dentro de `lessons/`. Se incluyen dos lecciones:
@@ -29,6 +31,8 @@ Es una demostración local: no incluye autenticación, base de datos ni sesiones
 ## Instalación
 
 ```sh
+git clone https://github.com/jpadillaa/explain-it-live.git
+cd explain-it-live
 npm ci
 cp -n .env.example .env   # solo si aún no tienes .env
 npm run voice:prepare     # descarga Whisper (~78 MB) para el micrófono
