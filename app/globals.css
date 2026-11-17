@@ -342,11 +342,19 @@ button.icon {
   box-shadow: 0 4px 25px #29203903;
 }
 .artifact.slides {
-  flex: 1;
+  /* Crece para llenar el panel, pero nunca se encoge por debajo de su
+     contenido: así el texto no se sale por arriba ni por abajo. */
+  flex: 1 0 auto;
   min-height: 530px;
   display: flex;
-  align-items: center;
   padding: 55px;
+}
+.slide-content {
+  /* Centrado vertical «seguro»: si no cabe, empieza arriba y la caja crece. */
+  margin-block: auto;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .slide-number {
   position: absolute;
@@ -376,7 +384,8 @@ h1 {
 }
 .slides h1 {
   font-size: clamp(38px, 3.8vw, 62px);
-  max-width: 600px;
+  /* Deja sitio al contador «2 / 3» de la esquina. */
+  max-width: min(600px, calc(100% - 60px));
 }
 .lead {
   font-size: 15px;
@@ -392,6 +401,7 @@ h1 {
 }
 .slide-points > div {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 13px;
   font-size: 13px;
@@ -416,7 +426,11 @@ h1 {
   color: #b4a8d5;
   margin-top: 40px;
 }
+.cloud-decoration svg {
+  flex-shrink: 0;
+}
 .cloud-decoration span {
+  min-width: 0;
   font-size: 11px;
   color: #aaa3b9;
 }
