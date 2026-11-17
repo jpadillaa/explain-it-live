@@ -1,0 +1,29 @@
+# Nada de credenciales, dependencias ni compilados locales en la imagen.
+.env*
+!.env.example
+node_modules
+.next
+.cache
+*.tsbuildinfo
+next-env.d.ts
+.git
+.gitignore
+.claude
+.vscode
+.idea
+.DS_Store
+npm-debug.log*
+coverage
+
+# No hacen falta para construir ni ejecutar.
+assets
+Dockerfile
+compose.yaml
+.dockerignore
+AGENTS.md
+ESPECIFICACION-POC.md
+README.md
+/*.png
+/*.jpg
+/*.wav
+/*.mp3

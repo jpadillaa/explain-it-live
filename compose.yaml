@@ -1,0 +1,42 @@
+# Tutor + voz Kokoro-FastAPI.
+#   docker compose up -d --build
+# Lee las credenciales de .env (Azure, ElevenLabs…) en tiempo de ejecución;
+# .env nunca se copia a la imagen. Cambiar LESSON_FILE exige --build.
+name: explain-it-live
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        LESSON_FILE: ${LESSON_FILE:-lessons/nube-nist.md}
+    image: explain-it-live:latest
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Por defecto, la voz del contenedor kokoro; usa SPEECH_PROVIDER=elevenlabs
+      # en .env para tu voz. «local» no está disponible en la imagen.
+      SPEECH_PROVIDER: ${SPEECH_PROVIDER:-kokoro-api}
+      KOKORO_API_URL: http://kokoro:8880
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    depends_on:
+      kokoro:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kokoro:
+    # La imagen ya incluye el modelo Kokoro v1.0 y sus voces.
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:${KOKORO_TAG:-latest}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8880/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    # Sin puerto publicado: solo la app lo usa por la red interna de compose.
+    # Descomenta para probarlo desde el equipo (choca con otro kokoro en 8880).
+    # ports:
+    #   - "127.0.0.1:8880:8880"
+    restart: unless-stopped

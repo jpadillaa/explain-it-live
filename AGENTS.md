@@ -182,6 +182,8 @@ La clave de Azure OpenAI se usa solo en ese servicio; ElevenLabs utiliza su prop
 
 Antes del arranque, seleccionar el perfil: Azure + ElevenLabs requiere ambas configuraciones; Azure + voz local requiere preparar Kokoro; la demo sin credenciales también requiere Kokoro para narrar. Whisper se prepara por separado para el micrófono. Copiar `.env.example` no descarga ninguno de esos modelos.
 
+Con Docker (`Dockerfile`, `compose.yaml`): `docker compose up -d --build` levanta la app de producción, con Whisper descargado durante la construcción, y `kokoro` (Kokoro-FastAPI con el modelo incluido en su imagen). Las credenciales llegan desde `.env` en tiempo de ejecución y nunca entran en la imagen. `LESSON_FILE` es un argumento de construcción, así que cambiar de lección exige `--build`. Compose fija `KOKORO_API_URL=http://kokoro:8880` y `SPEECH_PROVIDER` por defecto a `kokoro-api`; `local` no está disponible en la imagen. Verificado el 16/11/2026 en macOS arm64: página, Azure, voz por la red interna, Whisper y un artefacto Mermaid validado en producción. Compose exige un `.env` con sintaxis dotenv estricta; un carácter suelto en la primera línea ya lo había roto.
+
 Arranque habitual, con Node.js compatible (Next requiere al menos 20.9; la prueba limpia se ejecutó en macOS con Node.js 26.4.0 y npm 11.17.0, no en todas las versiones):
 
 ```sh

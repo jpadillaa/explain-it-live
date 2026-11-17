@@ -41,6 +41,23 @@ npm run dev
 
 Abre <http://127.0.0.1:3000>. Las variables de `.env` y la lección se leen al arrancar: **reinicia `npm run dev` tras cambiarlas**. Los cambios de código se recargan solos.
 
+## Docker
+
+`compose.yaml` levanta dos servicios: la app compilada para producción, con Whisper ya descargado en la imagen, y Kokoro-FastAPI, cuya imagen trae el modelo y las voces. No hace falta Node, `npm run voice:prepare` ni Docker manual para la voz.
+
+```sh
+docker compose up -d --build
+```
+
+Abre <http://127.0.0.1:3000> (otro puerto: `APP_PORT=3100 docker compose up -d`). Para detenerlo: `docker compose down`.
+
+- **Credenciales:** se leen de `.env` al arrancar el contenedor. `.env` nunca se copia a la imagen (`.dockerignore`).
+- **Lección:** `LESSON_FILE` se lee de `.env` **al construir**. Tras cambiarla o editar la lección, reconstruye con `docker compose up -d --build`.
+- **Voz:** por defecto `kokoro-api` contra el servicio `kokoro` de la red interna (`KOKORO_API_URL` lo fija compose). Para usar tu voz, pon `SPEECH_PROVIDER=elevenlabs` en `.env` y reinicia. `local` no está disponible en la imagen.
+- **Versión de Kokoro:** `KOKORO_TAG` fija otra etiqueta de la imagen (por defecto `latest`). El servicio `kokoro` no publica puertos en el equipo.
+
+La imagen de la app ocupa unos 1,9 GB, casi todo dependencias (ONNX Runtime, Transformers, Mermaid y Vega).
+
 ## Configuración (`.env`)
 
 Las claves se usan solo en el servidor; no uses el prefijo `NEXT_PUBLIC_` ni compartas `.env`. Si existe `.env.local`, tiene prioridad.
@@ -136,5 +153,6 @@ Con el servidor en marcha, `GET /api/tutor` y `GET /api/speech` muestran el modo
 | `public/tutor-avatar/` | Sprites WebP del avatar. |
 | `assets/tutor-avatar/` | PNG originales del avatar (no se publican). |
 | `scripts/` | Descarga de modelos locales. |
+| `Dockerfile`, `compose.yaml`, `.dockerignore` | Imagen de la app con Whisper y despliegue junto a Kokoro-FastAPI. |
 
 Para las decisiones pedagógicas y técnicas y el estado de verificación, consulta [AGENTS.md](AGENTS.md).
