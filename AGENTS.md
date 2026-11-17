@@ -1,6 +1,6 @@
 # Nube Tutor — contexto y guía de continuidad
 
-Actualizado: 16 de noviembre de 2026. Proyecto local: `/Users/jpadillaa/workspace_git/demo_tutor`. Este documento reúne el origen, las decisiones del usuario, la implementación y el estado de verificación. Describe una POC; no implica que exista un producto publicado ni una evaluación pedagógica formal.
+Actualizado: 17 de noviembre de 2026. Proyecto local: `/Users/jpadillaa/workspace_git/demo_tutor`. Este documento reúne el origen, las decisiones del usuario, la implementación y el estado de verificación. Describe una POC; no implica que exista un producto publicado ni una evaluación pedagógica formal.
 
 ## 1. Propósito y punto de partida
 
@@ -57,6 +57,8 @@ El contenido de cada lección (saludo, ejes, conceptos, cierres, resumen, temas 
 | Corrección de React | Se resolvieron claves duplicadas entre el revelado y los componentes de diagramas/simulaciones usando prefijos diferenciados. |
 | Avatar | Se integraron cuatro sprites del usuario junto a «Tu profesor de nube», animados durante la reproducción oral. |
 | Contraste | Se intensificó el fondo lila de la lección a `#e5dff2` para destacar el artefacto blanco. |
+| Diapositivas sin desborde | La tarjeta de las diapositivas crece con su contenido y el panel hace scroll; antes el texto se salía por arriba y por abajo (17/11/2026). |
+| Apoyo visual por intención | En cada pregunta, el clasificador decide si basta la voz o si la respuesta necesita una diapositiva o un gráfico; el profesor debe respetarlo (17/11/2026). |
 
 No hay un editor de código para el estudiante; el único código ejecutado es el de los artefactos ricos, aislado como se describe en la sección 4. El cuarto panel de ejecución y la generación arbitraria de aplicaciones eran parte de la referencia inicial, no una función actual.
 
@@ -99,11 +101,29 @@ El frontend y las rutas servidor conviven en el mismo proyecto. No hay base de d
 1. El alumno escribe, pulsa una acción o termina una intervención oral.
 2. Se detiene la narración vigente y se cancela la captura anterior cuando corresponde.
 3. Se envían la participación, la explicación actual y el contexto compacto a `/api/tutor`.
-4. Con proveedor real se clasifica el alcance; si procede, se genera la respuesta y se valida con Zod. Una salida inválida admite un intento adicional de corrección.
+4. Con proveedor real se clasifica el alcance y la intención, que decide el apoyo visual (ver «Apoyo visual según la intención»); si procede, se genera la respuesta y se valida con Zod. Una salida inválida admite un intento adicional de corrección.
 5. Se reemplaza la explicación. Si hay artefacto, se actualiza y se reinician sus controles según sus datos iniciales. La señal visual se activa cuando cambian sus datos.
 6. Se narra la nueva intervención; el avatar acompaña la reproducción efectiva. El alumno puede interrumpir y comenzar otro turno.
 
 Los clientes NDJSON reciben eventos de progreso; el endpoint también admite la respuesta JSON habitual. Esas etapas son estados de ejecución, no una exposición del razonamiento interno del modelo. La síntesis de voz comienza después de recibir la intervención textual final; la explicación del LLM aún no se narra token a token.
+
+### Apoyo visual según la intención
+
+Decisión del usuario (17/11/2026): al hablar o escribir, se analiza la intención y si vale la pena acompañar la respuesta con algo visual. Por ejemplo, «¿qué es multicloud?» debe dibujar multicloud y «¿por qué un LED necesita una resistencia?» debe mostrar el circuito. La misma llamada que clasifica el alcance (`scopeSchema` en `app/api/tutor/route.ts`, criterios en `supportCriteria`) devuelve `intencion`, `apoyo` (`voz`, `diapositiva` o `grafico`), `formato` sugerido e `idea` de lo que debe mostrarse. Para decidir tiene en cuenta la explicación vigente y la vista actual:
+
+- **grafico:** qué es, por qué o cómo funciona algo con partes, relaciones, flujos, mecanismos, causa-efecto o cantidades; también una petición explícita de dibujo, video o simulación, o un cambio a la vista.
+- **diapositiva:** definiciones, distinciones de términos o listas de rasgos que la vista no muestra.
+- **voz:** saludos, agradecimientos, sí/no, respuestas a comprobaciones, pedir repetir, matices breves, o cuando la vista ya muestra ese concepto.
+
+El profesor recibe `apoyoVisual` y debe respetarlo. En el primer intento la validación exige el artefacto: un encargo, o un diagrama/simulación declarativo, para `grafico`, y cualquier artefacto para `diapositiva`. Si en la corrección vuelve a omitir un gráfico, el servidor arma el encargo con la idea, la pregunta y la narración (`fallbackCommission`). Una diapositiva omitida dos veces se acepta como solo voz. Un análisis mal formado se ignora y el turno sigue como antes, y «Continuar clase» y la navegación no pasan por este análisis. El servidor registra cada decisión como `[tutor] intención: … · apoyo: …`.
+
+Verificado con `gpt-6-luna` en Docker con la lección de Arduino:
+
+- «¿Por qué un LED necesita una resistencia?» → grafico (html): laboratorio con el circuito, las caídas de tensión y un control de la resistencia.
+- «Vale, entendido, gracias» → voz: se conservó el artefacto.
+- «¿Qué significan exactamente voltaje, corriente y resistencia?» → diapositiva: tres láminas.
+
+La decisión depende del LLM y no es infalible; añade unos tokens a la llamada de alcance, sin una llamada extra.
 
 ### Memoria y persistencia
 
@@ -163,6 +183,8 @@ La interfaz mantiene profesor a la izquierda, artefacto central y progreso/notas
 
 Cuando cambian los datos del artefacto, 12 tarjetas violetas en una cuadrícula de 4 × 3 lo cubren y se voltean en diagonal. Cada giro dura 775 ms; el retardo es `(fila + columna) × 95 ms`. El último retardo es 475 ms: el revelado completo dura **1.250 ms**. El aviso «Contenido actualizado» permanece 3,5 segundos. El overlay no bloquea los controles y respeta `prefers-reduced-motion`.
 
+Diapositivas (`.artifact.slides` en `app/globals.css`, 17/11/2026): la tarjeta usa `flex: 1 0 auto` y `min-height: 530px`, así que llena el panel pero nunca queda más baja que su contenido. `.slide-content` se centra con `margin-block: auto` (centrado «seguro»: si no cabe, empieza arriba) y parte palabras largas con `overflow-wrap: anywhere`. El título deja 60 px al contador «n / m» y el icono decorativo no se encoge. Antes la tarjeta tenía la altura del hueco disponible y centraba con `align-items: center`, de modo que el contenido de las diapositivas generadas sobresalía por ambos lados: se perdían la línea de fuente arriba y el icono abajo. Verificado en el navegador con un título y una lista alargados a 1730, 1100 y 375 px de ancho: nada sale de la tarjeta, nada choca con el contador y no hay scroll horizontal en móvil. No volver a fijar la altura de la tarjeta ni a centrar con `align-items`. A partir de unos 1100 px de ancho, el panel «Tu recorrido» se abre encima de la clase; es el diseño responsive previo, no un desborde.
+
 Las claves React del overlay y los artefactos llevan prefijos distintos (`reveal-…`, tipo de artefacto + versión). Conservar esa separación: claves numéricas idénticas entre hermanos produjeron los avisos de duplicados que ya se corrigieron.
 
 ## 7. Configuración y ejecución
@@ -200,7 +222,7 @@ Para la voz local alternativa, instalar `espeak-ng` y ejecutar `npm run professo
 
 ## 8. Verificación y estado conocido
 
-En la auditoría de instalación se creó una copia temporal sin dependencias, compilados, modelos ni credenciales del proyecto original. Se ejecutaron `npm ci`, TypeScript, 18 pruebas (hoy son 39) y el build correctamente. `.env` se creó desde `.env.example`. También se descargaron y prepararon Whisper y Kokoro desde cachés vacías. `espeak-ng` ya estaba instalado en el sistema: esta auditoría comprobó su uso, no una instalación nueva de Homebrew o del sistema operativo. npm informó scripts pendientes, pero los comandos completaron correctamente sin habilitar scripts adicionales. Se arrancaron desarrollo y producción en un puerto aislado y se verificaron HTTP 200 para página, participación demo y síntesis local, carga de Whisper y transcripción de una frase española generada. Se detuvieron los servidores temporales; el servidor original del proyecto no se reinició ni modificó. Esto verifica la instalación y los contratos de configuración; en esta auditoría no se repitió la autenticación real de Azure/ElevenLabs ni una prueba humana de micrófono. La autenticación en servicios externos debe comprobarse con credenciales propias.
+En la auditoría de instalación se creó una copia temporal sin dependencias, compilados, modelos ni credenciales del proyecto original. Se ejecutaron `npm ci`, TypeScript, 18 pruebas (hoy son 43) y el build correctamente. `.env` se creó desde `.env.example`. También se descargaron y prepararon Whisper y Kokoro desde cachés vacías. `espeak-ng` ya estaba instalado en el sistema: esta auditoría comprobó su uso, no una instalación nueva de Homebrew o del sistema operativo. npm informó scripts pendientes, pero los comandos completaron correctamente sin habilitar scripts adicionales. Se arrancaron desarrollo y producción en un puerto aislado y se verificaron HTTP 200 para página, participación demo y síntesis local, carga de Whisper y transcripción de una frase española generada. Se detuvieron los servidores temporales; el servidor original del proyecto no se reinició ni modificó. Esto verifica la instalación y los contratos de configuración; en esta auditoría no se repitió la autenticación real de Azure/ElevenLabs ni una prueba humana de micrófono. La autenticación en servicios externos debe comprobarse con credenciales propias.
 
 `GET /api/tutor` y `GET /api/speech` identifican el modo seleccionado, no prueban conectividad ni autenticación; en particular, el GET del tutor puede indicar modo local ante una configuración Azure inválida aunque la participación POST muestre su error. No presentar la etiqueta «conectado» como una prueba de acceso real al modelo. `GET /api/transcribe` sí carga Whisper para comprobar su disponibilidad.
 
@@ -210,7 +232,7 @@ node --import tsx --test lib/tutor.test.ts
 npm run build
 ```
 
-Las pruebas cubren contenido base y contratos, multicloud/alcance local, tablas, diagramas, fórmulas, eventos NDJSON, corrección de salida, memoria compacta, WAV, silencio, cancelación de grabación, pronunciación, selección/errores de ElevenLabs y entrega incremental de audio. Las pruebas unitarias de proveedores usan respuestas simuladas; no equivalen a una llamada real en cada ejecución.
+Las pruebas cubren contenido base y contratos, multicloud/alcance local, tablas, diagramas, fórmulas, eventos NDJSON, corrección de salida, memoria compacta, WAV, silencio, cancelación de grabación, pronunciación, selección/errores de ElevenLabs, entrega incremental de audio y el apoyo visual por intención (exigencia, encargo de respaldo y análisis mal formado). Las pruebas unitarias de proveedores usan respuestas simuladas; no equivalen a una llamada real en cada ejecución.
 
 También se realizaron pruebas reales de Azure y ElevenLabs y revisión de navegador: saludo, explicaciones, streaming, creación de diagramas y simulaciones, transiciones entre tipos sin avisos de React, revelado, avatar hablando/reposo y detención al activar micrófono. Se verificó transcripción local con audio de prueba y acceso al micrófono; no asumir validación exhaustiva con múltiples hablantes, acentos, dispositivos o navegadores.
 
@@ -231,10 +253,11 @@ Posibles trabajos futuros, sujetos a solicitud: revisión docente de respuestas 
 - Mantener el alcance curricular reducido y la libertad de preguntar sobre cloud afín.
 - Preservar la clase guiada con intervención vigente, no reintroducir un chat acumulativo por defecto.
 - Conservar saludo oral/textual, participación por texto/voz y la capacidad de interrumpir.
-- Elegir representaciones según la petición; no reducir diagramas o simulaciones a listas de bullets. Preferir encargos ricos para lo visual y mantener el aislamiento del iframe (sin `allow-same-origin`, CSP sin red).
+- Analizar la intención de cada pregunta para decidir entre voz, diapositiva o gráfico; no dejar sin apoyo visual una aclaración que se entiende mejor viéndola. Elegir representaciones según la petición; no reducir diagramas o simulaciones a listas de bullets. Preferir encargos ricos para lo visual y mantener el aislamiento del iframe (sin `allow-same-origin`, CSP sin red).
 - Mantener supuestos visibles y límites de simulaciones declarativas.
 - Conservar la voz del usuario configurada y el reposo del avatar fuera de la reproducción.
 - Mantener contraste, revelado de 1,25 s y preferencias de movimiento reducido salvo nueva decisión del usuario.
+- Las diapositivas y demás artefactos no deben deformarse ni salirse de su tarjeta: el contenedor crece con el contenido y el panel hace scroll.
 - Diferenciar lo comprobado por pruebas, lo observado en navegador y la revisión pedagógica pendiente.
 - Leer el código propietario antes de modificarlo; este documento registra el estado y puede quedar desactualizado.
 - Preservar el bloque de instrucciones Next.js que aparece a continuación.

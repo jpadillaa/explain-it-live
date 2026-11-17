@@ -1149,6 +1149,87 @@ test("un encargo del profesor llega después de la narración, se corrige una ve
   assert.match(bodies[4].messages.at(-1)!.content, /recursos externos/);
 });
 
+test("el análisis de intención exige un gráfico al aclarar un concepto y, si el profesor lo omite, lo encarga igualmente", async (t) => {
+  const { POST } = await import("../app/api/tutor/route");
+  setTestEnv(t, {
+    AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com/",
+    AZURE_OPENAI_API_KEY: "test-key",
+    AZURE_OPENAI_DEPLOYMENT_1: "docente",
+  });
+  const idea = "Varios proveedores de nube con cargas repartidas entre ellos";
+  const spoken = {
+    mensaje: [{ texto: "Multicloud es usar servicios de más de un proveedor de nube.", concepto: null }],
+    clase: { paso: 0, notaDelEstudiante: "" },
+    artefacto: null,
+    acciones: [],
+  };
+  const lab = {
+    tipo: "html",
+    titulo: "Multicloud",
+    descripcion: "Cargas repartidas entre proveedores.",
+    guia: [],
+    html: "<div class=\"tarjeta\">Proveedor A</div><div class=\"tarjeta\">Proveedor B</div>",
+  };
+  const upstream: unknown[] = [
+    { permitido: true, foco: null, intencion: "aclaración", apoyo: "grafico", formato: "html", idea },
+    spoken,
+    spoken,
+    { anuncios: [] },
+    lab,
+  ];
+  const bodies: { messages: { content: string }[] }[] = [];
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)));
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(upstream.shift()) } }] }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  const response = await POST(new Request("http://localhost/api/tutor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mensaje: "¿Qué es multicloud?", historial: [], contexto: initialContext }),
+  }));
+  const data = await response.json();
+  assert.equal(data.artefacto?.tipo, "html");
+  assert.equal(upstream.length, 0);
+  assert.match(bodies[0].messages[0].content, /apoyo/);
+  assert.match(bodies[1].messages.at(-1)!.content, /"apoyo":"grafico"/);
+  assert.match(bodies[2].messages.at(-1)!.content, /apoyo gráfico/);
+  const design = bodies[4].messages.at(-1)!.content;
+  assert.ok(design.includes(idea) && design.includes("¿Qué es multicloud?"));
+});
+
+test("un análisis de apoyo mal formado se ignora sin romper el turno", async (t) => {
+  const { POST } = await import("../app/api/tutor/route");
+  setTestEnv(t, {
+    AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com/",
+    AZURE_OPENAI_API_KEY: "test-key",
+    AZURE_OPENAI_DEPLOYMENT_1: "docente",
+  });
+  const upstream: unknown[] = [
+    { permitido: true, foco: null, apoyo: "mucho", formato: "pdf" },
+    {
+      mensaje: [{ texto: "Exacto, lo has entendido bien.", concepto: null }],
+      clase: { paso: 0, notaDelEstudiante: "" },
+      artefacto: null,
+      acciones: [],
+    },
+    { anuncios: [] },
+  ];
+  t.mock.method(globalThis, "fetch", async () =>
+    new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(upstream.shift()) } }] }), {
+      headers: { "Content-Type": "application/json" },
+    }));
+  const response = await POST(new Request("http://localhost/api/tutor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mensaje: "Sí, eso creo", historial: [], contexto: initialContext }),
+  }));
+  const data = await response.json();
+  assert.equal(data.mensaje, "Exacto, lo has entendido bien.");
+  assert.equal(data.artefactoPendiente ?? null, null);
+});
+
 test("si el diseñador no logra un artefacto válido, la narración se conserva y se informa el fallo", async (t) => {
   const { POST } = await import("../app/api/tutor/route");
   setTestEnv(t, {
