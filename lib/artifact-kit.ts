@@ -96,7 +96,12 @@ var tutor={
       else{var abajo=r2.top>=r1.bottom-1;y1=(abajo?r1.bottom:r1.top)-c.top;y2=(abajo?r2.top:r2.bottom)-c.top;var l=Math.max(r1.left,r2.left),rr=Math.min(r1.right,r2.right);
         if(rr-l>8){x1=x2=(l+rr)/2-c.left;d="M"+x1+","+y1+" L"+x2+","+y2}else{x1=(r1.left+r1.right)/2-c.left;x2=(r2.left+r2.right)/2-c.left;var ym=(y1+y2)/2;d="M"+x1+","+y1+" L"+x1+","+ym+" L"+x2+","+ym+" L"+x2+","+y2}}
       linea.setAttribute("d",d);
-      if(op.etiqueta){var mx=(x1+x2)/2,my=(y1+y2)/2;txt.setAttribute("x",mx);txt.setAttribute("y",my);var bb=txt.getBBox();fondo.setAttribute("x",bb.x-4);fondo.setAttribute("y",bb.y-2);fondo.setAttribute("width",bb.width+8);fondo.setAttribute("height",bb.height+4)}}
+      if(op.etiqueta){var mx=(x1+x2)/2,my=(y1+y2)/2,hueco=h?Math.abs(x2-x1):Infinity;rotular(mx,my,Math.max(56,Math.min(160,hueco-10)))}}
+    // Parte la etiqueta en líneas para que quepa en el hueco entre las cajas.
+    function rotular(mx,my,maximo){txt.textContent="";var palabras=String(op.etiqueta).split(/\s+/),lineas=[],actual="";
+      palabras.forEach(function(w){var prueba=actual?actual+" "+w:w;txt.textContent=prueba;if(actual&&txt.getComputedTextLength()>maximo){lineas.push(actual);actual=w}else actual=prueba});if(actual)lineas.push(actual);
+      txt.textContent="";lineas.forEach(function(l,k){var t=document.createElementNS(ns,"tspan");t.setAttribute("x",mx);t.setAttribute("dy",k===0?(-(lineas.length-1)*0.6)+"em":"1.2em");t.textContent=l;txt.append(t)});
+      txt.setAttribute("x",mx);txt.setAttribute("y",my);var bb=txt.getBBox();fondo.setAttribute("x",bb.x-4);fondo.setAttribute("y",bb.y-2);fondo.setAttribute("width",bb.width+8);fondo.setAttribute("height",bb.height+4)}
     capa.__lineas.push(dibujar);requestAnimationFrame(dibujar);return {redibujar:dibujar};
   }
 };
@@ -130,6 +135,9 @@ function chequear(prefijo){
     var tapa=null,tapados=0;[0.1,0.3,0.5,0.7,0.9].forEach(function(k){var x=r.left+r.width*k,y=r.top+r.height*0.5;if(y<0||y>H)return;var top=document.elementFromPoint(x,y);
       if(top&&top!==n&&!n.contains(top)&&!top.contains(n)&&lista.indexOf(top)<0){tapados++;tapa=top}});
     if(tapados>=2)p("El texto "+q+" queda tapado por "+nombre(tapa)+": dibuja el texto encima o muévelo fuera de la figura.")});
+  document.querySelectorAll(".tk-capa text").forEach(function(e){var partes=e.querySelectorAll("tspan"),etiqueta=(partes.length?Array.prototype.map.call(partes,function(t){return t.textContent}).join(" "):e.textContent||"").trim();if(!etiqueta)return;var r=e.getBoundingClientRect();if(r.width<2)return;
+    lista.forEach(function(n,i){var o=rects[i],ancho=Math.min(r.right,o.right)-Math.max(r.left,o.left),alto=Math.min(r.bottom,o.bottom)-Math.max(r.top,o.top);
+      if(ancho>2&&alto>2)p("La etiqueta de flecha «"+etiqueta.slice(0,40)+"» se superpone con el texto "+nombre(n)+": aumenta la separación (gap ≥ 140 px) entre las cajas que une o acorta la etiqueta a 1-2 palabras.")})});
   if(pequenos.length){var e=escala();p(pequenos.length+" textos se ven demasiado pequeños (mínimo 12 px en pantalla), p. ej. "+pequenos.slice(0,3).join(", ")+". El marco mide "+W+" px"+(e?"; "+e:"")+". Haz que el dibujo ocupe todo el ancho del marco (no en una columna estrecha) y elige viewBox y font-size para que font-size × escala ≥ 13 px.")}
   return problemas}
 function revisar(){
